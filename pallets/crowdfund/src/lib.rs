@@ -67,8 +67,26 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Crea un proyecto.
 		pub fn crear_proyecto(origen: OriginFor<T>, nombre: String) -> DispatchResult {
-			// Completar este método.
-			todo!()
+			let who = ensure_signed(origen)?;
+
+			// Convertir el nombre de bytes a un tipo `NombreProyecto<T>` acotado.
+			let acotado_result: Result<NombreProyecto<T>, _> =
+				NombreProyecto::<T>::try_from(nombre.clone());
+			let acotado_result = match acotado_result {
+				Ok(v) => v,
+				Err(_) => return Err(Error::<T>::NombreMuyLargo.into()),
+			};
+
+			// Obtener la longitud del nombre acotado.
+			let longitud = acotado_result.len() as u32;
+			ensure!(longitud >= T::LargoMinimoNombreProyecto::get(), Error::<T>::NombreMuyCorto);
+			ensure!(longitud <= T::LargoMaximoNombreProyecto::get(), Error::<T>::NombreMuyLargo);
+
+			// Crear un proyecto con un balance inicial de cero.
+			let balance_cero = BalanceDe::<T>::from(0u32);
+			Proyectos::<T>::insert(acotado_result, balance_cero);
+
+			Ok(())
 		}
 
 		pub fn apoyar_proyecto(
@@ -76,8 +94,28 @@ pub mod pallet {
 			nombre: String,
 			cantidad: BalanceDe<T>,
 		) -> DispatchResult {
-			// Completar este método.
-			todo!()
+			let sender = ensure_signed(origen)?;
+
+			let bounded_name: NombreProyecto<T> = nombre.clone().try_into().unwrap();
+
+			ensure!(Proyectos::<T>::contains_key(&bounded_name), Error::<T>::ProyectoNoExiste);
+
+			let current_balance = T::Currency::free_balance(&sender);
+			ensure!(current_balance >= cantidad, Error::<T>::FondosInsuficientes);
+
+			let project_balance = Proyectos::<T>::get(&bounded_name);
+			let new_project_balance = project_balance + cantidad;
+			Proyectos::<T>::insert(&bounded_name, new_project_balance);
+
+			T::Currency::withdraw(
+				&sender,
+				cantidad,
+				frame_support::traits::WithdrawReasons::TRANSFER,
+				frame_support::traits::ExistenceRequirement::KeepAlive,
+			)?;
+
+			Ok(())
 		}
-	}
+}
+
 }
